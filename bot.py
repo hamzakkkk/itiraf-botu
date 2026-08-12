@@ -7,7 +7,13 @@ import threading
 from flask import Flask
 import requests
 from telegram import BotCommand, Update
-from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    ApplicationBuilder,
+    CommandHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
 # --- 1. RENDER İÇİN WEB SUNUCUSU ---
 app_web = Flask('')
@@ -35,7 +41,7 @@ BELO_ID = 8200746117
 itiraflar = []
 HEDEF_GRUP_ID = None
 
-# Grupta aktif olan kullanıcıları saklayacağımız liste (Günün çifti için)
+# Gruptaki kullanıcıları ID ve Ad olarak tutan hafıza
 grup_uyeleri = {}
 
 
@@ -214,8 +220,12 @@ def grup_ve_kullanici_kaydet(update: Update):
 
         user = update.effective_user
         if user and not user.is_bot:
-            # Kullanıcının adını ve ID'sini hafızaya al
             grup_uyeleri[chat_id][user.id] = user.full_name
+
+
+# HER MESAJDA KULLANICI KAYDEDEN DINLEYICI
+async def mesaj_dinleyici(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    grup_ve_kullanici_kaydet(update)
 
 
 # 🌤️ HAVA DURUMU
@@ -311,23 +321,23 @@ async def gunun_cifti(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     if len(uyeler) < 2:
         await update.message.reply_text(
-            '⚠️ Günün çiftini seçebilmem için gruptan en az 2 kişinin bot'
-            ' komutlarını kullanmış olması veya mesaj atması gerekiyor!'
+            '⚠️ Günün çiftini seçebilmem için gruptan en az 2 kişinin mesaj'
+            ' yazmış olması gerekiyor!'
         )
         return
 
-    # Üyeler arasından rastgele 2 kişi seç
     secilenler = random.sample(list(uyeler.items()), 2)
     kisi1_id, kisi1_adi = secilenler[0]
     kisi2_id, kisi2_adi = secilenler[1]
 
     tarih_str = datetime.now().strftime('%d.%m.%Y')
+    uyum = random.randint(85, 100)
 
     mesaj = (
         f'💘 GÜNÜN ÇİFTİ ({tarih_str}) 💘\n\n'
         f'Yıldızlar bugün bu iki güzel insanı işaret ediyor:\n\n'
-        f'👩‍❤️‍👨 [ {kisi1_adi} ]  ➕  [ {kisi2_adi} ]\n\n'
-        f'Uyum Derecesi: %{random.randint(85, 100)} 🔥\n'
+        f'👩‍❤️‍👨 {kisi1_adi}  +  {kisi2_adi}\n\n'
+        f'Uyum Derecesi: %{uyum} 🔥\n'
         f'Tebrikler! 🎉'
     )
 
@@ -394,11 +404,17 @@ if __name__ == '__main__':
     keep_alive()
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
 
+    # Gruptaki her normal mesajda gönderen kişiyi hafızaya alan dinleyici
+    app.add_handler(
+        MessageHandler(filters.TEXT & (~filters.COMMAND), mesaj_dinleyici)
+    )
+
     app.add_handler(CommandHandler('itiraf', itiraf_et))
     app.add_handler(CommandHandler('itirafgetir', itiraf_getir))
     app.add_handler(CommandHandler('hava', hava_durumu))
     app.add_handler(CommandHandler('burc', burc_yorum))
-    app.add_handler(CommandHandler('belolar', belo_etiketle))
+    app.add_handler(CommandHandler('belo', belo_etiketle))
+    app.add_handler(CommandHandler('cift', gunun_cifti))
     app.add_handler(CommandHandler('çift', gunun_cifti))
 
     print('Bot aktif!')
