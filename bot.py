@@ -1,9 +1,7 @@
 import asyncio
 from datetime import datetime
 import os
-import re
 import threading
-import xml.etree.ElementTree as ET
 from flask import Flask
 import requests
 from telegram import BotCommand, Update
@@ -30,19 +28,52 @@ def keep_alive():
 # --- 2. BOT AYARLARI ---
 ADMIN_ID = 8200746117
 TOKEN = '8870037601:AAFmFTITU4Fi9H2wrXZpu1tRNfjOT4DXCxw'
-
-# 💡 Belo'nun Telegram User ID'sini biliyorsan 0 yerine onu yaz (Örn: 123456789)
-BELO_ID = 0
+BELO_ID = 8200746117  # Belo'nun ID'si eklendi
 
 itiraflar = []
-HEDEF_GRUP_ID = None  # Otomatik yakalanacak
+HEDEF_GRUP_ID = None
 
 
-# --- 3. 30 DAKİKADA BİR ATILACAK OTOMATİK MESAJ ---
+# --- 3. KESİNTİSİZ ASTROLOJİ MOTORU ---
+BURC_ISIMLERI = {
+    'koc': 'Koç',
+    'boga': 'Boğa',
+    'ikizler': 'İkizler',
+    'yengec': 'Yengeç',
+    'aslan': 'Aslan',
+    'basak': 'Başak',
+    'terazi': 'Terazi',
+    'akrep': 'Akrep',
+    'yay': 'Yay',
+    'oglak': 'Oğlak',
+    'kova': 'Kova',
+    'balik': 'Balık',
+}
+
+MODLAR = [
+    'Bugün gökyüzü seni enerjik ve kararlı kılıyor. Ertelediğin işlerin üzerine gitmek için harika bir gün.',
+    'İletişim kanallarının açık olduğu bir gün. Yakın çevrenden alacağın haberler modunu yükseltebilir.',
+    'Maddi ve duygusal konularda denge kurman gereken bir süreçtesin. Acele kararlar almaktan kaçın.',
+    'Zihnin oldukça aktif ve yaratıcı. Kafandaki planları hayata geçirmek için doğru adımları atabilirsin.',
+    'Bugün biraz kendi kabuğuna çekilip dinlenmek isteyebilirsin. Sezgilerine güven, seni yanıltmayacak.',
+    'Sosyal çevrenle ve arkadaşlarınla ilişkilerinin ön plana çıktığı, keyifli sohbetlerin döneceği bir gün.',
+    'Detaylara olan dikkatin sayesinde gözden kaçan bir noktayı yakalayacaksın. İpleri elinde tut.',
+]
+
+TAVSIYELER = [
+    'Günün tavsiyesi: Küçük aksiliklere takılmak yerine büyük resme odaklanmayı dene.',
+    'Günün tavsiyesi: İç sesini dinle ama fevri çıkışlar yapmamaya gayret et.',
+    'Günün tavsiyesi: Güvendiğin insanlarla istişare etmek sana farklı bir bakış açısı kazandıracak.',
+    'Günün tavsiyesi: Enerjini seni aşağı çeken şeylere değil, hedeflerine harca.',
+    'Günün tavsiyesi: Akşam saatlerinde kendine zaman ayırıp zihnini boşaltmayı unutma.',
+]
+
+
+# --- 4. 30 DAKİKADA BİR OTOMATİK MESAJ ---
 async def otomatik_duyuru(app):
     global HEDEF_GRUP_ID
     while True:
-        await asyncio.sleep(1800)  # 30 dakika (1800 saniye)
+        await asyncio.sleep(1800)  # 30 dakika
         if HEDEF_GRUP_ID:
             try:
                 duyuru_metni = (
@@ -55,7 +86,7 @@ async def otomatik_duyuru(app):
                 print(f'Otomatik duyuru hatası: {e}')
 
 
-# --- 4. KOMUTLAR VE OTOMATİK MENÜ ---
+# --- 5. KOMUTLAR VE OTOMATİK MENÜ ---
 async def post_init(app):
     komutlar = [
         BotCommand('itiraf', 'Anonim itiraf gönder (Sadece özel mesajda)'),
@@ -65,11 +96,9 @@ async def post_init(app):
         BotCommand('belo', 'Belo ve Fehmiyi etiketler'),
     ]
     await app.bot.set_my_commands(komutlar)
-    # Arka planda 30 dk'lık döngüyü başlatır
     asyncio.create_task(otomatik_duyuru(app))
 
 
-# GRUP ID YAKALAYICI
 def grup_id_kaydet(update: Update):
     global HEDEF_GRUP_ID
     if update.effective_chat and update.effective_chat.type in [
@@ -109,7 +138,7 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    burc = context.args[0].lower().strip()
+    girdi = context.args[0].lower().strip()
     tr_map = {
         'koç': 'koc',
         'boğa': 'boga',
@@ -118,76 +147,37 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'oğlak': 'oglak',
         'balık': 'balik',
     }
-    burc = tr_map.get(burc, burc)
+    burc_key = tr_map.get(girdi, girdi)
 
-    burc_isimleri = {
-        'koc': 'Koç',
-        'boga': 'Boğa',
-        'ikizler': 'İkizler',
-        'yengec': 'Yengeç',
-        'aslan': 'Aslan',
-        'basak': 'Başak',
-        'terazi': 'Terazi',
-        'akrep': 'Akrep',
-        'yay': 'Yay',
-        'oglak': 'Oğlak',
-        'kova': 'Kova',
-        'balik': 'Balık',
-    }
-
-    if burc not in burc_isimleri:
+    if burc_key not in BURC_ISIMLERI:
         await update.message.reply_text(
             '⚠️ Geçersiz burç adı. Örnek kullanım: /burc koc'
         )
         return
 
-    try:
-        url = 'https://siteneekle.haber7.com/rss/astroloji.xml'
-        headers = {'User-Agent': 'Mozilla/5.0'}
-        res = requests.get(url, headers=headers, timeout=5)
+    # Günün tarihine göre dinamik yorum oluşturur
+    bugun = datetime.now()
+    gun_kodu = bugun.year + bugun.month + bugun.day + ord(burc_key[0])
 
-        if res.status_code == 200:
-            root = ET.fromstring(res.content)
-            hedef_isim = burc_isimleri[burc]
+    mod_idx = gun_kodu % len(MODLAR)
+    tavsiye_idx = (gun_kodu * 3) % len(TAVSIYELER)
 
-            for item in root.findall('.//item'):
-                title = item.find('title')
-                description = item.find('description')
+    burc_adi = BURC_ISIMLERI[burc_key]
+    tarih_str = bugun.strftime('%d.%m.%Y')
 
-                if (
-                    title is not None
-                    and hedef_isim.lower() in title.text.lower()
-                ):
-                    if description is not None and description.text:
-                        metin = re.sub(
-                            r'<[^<]+?>', '', description.text
-                        ).strip()
-                        metin = metin.replace('&nbsp;', ' ')
+    mesaj = (
+        f'🔮 **{burc_adi.upper()} BURCU GÜNLÜK YORUMU ({tarih_str}):**\n\n'
+        f'{MODLAR[mod_idx]}\n\n'
+        f'💡 {TAVSIYELER[tavsiye_idx]}'
+    )
 
-                        await update.message.reply_text(
-                            f'🔮 {hedef_isim.upper()} BURCU GÜNLÜK'
-                            f' YORUMU:\n\n{metin}'
-                        )
-                        return
-
-        await update.message.reply_text(
-            '⚠️ Bugün için burç yorumu henüz güncellenmedi.'
-        )
-
-    except Exception:
-        await update.message.reply_text(
-            '⚠️ Burç yorumu alınırken bir hata oluştu.'
-        )
+    await update.message.reply_text(mesaj, parse_mode='Markdown')
 
 
 # 🏷️ BELO VE FEHMİ ETİKETLEME
 async def belo_etiketle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     grup_id_kaydet(update)
-    if BELO_ID != 8200746117:
-        belo_metin = f'[belo](tg://user?id={BELO_ID})'
-    else:
-        belo_metin = 'belo'
-
+    belo_metin = f'[belo](tg://user?id={BELO_ID})'
     mesaj = f'{belo_metin} @fehmi99'
     await update.message.reply_text(mesaj, parse_mode='Markdown')
 
