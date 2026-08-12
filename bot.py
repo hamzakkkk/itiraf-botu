@@ -1,5 +1,6 @@
 import asyncio
 from datetime import datetime
+import hashlib
 import os
 import threading
 from flask import Flask
@@ -28,13 +29,13 @@ def keep_alive():
 # --- 2. BOT AYARLARI ---
 ADMIN_ID = 8200746117
 TOKEN = '8870037601:AAFmFTITU4Fi9H2wrXZpu1tRNfjOT4DXCxw'
-BELO_ID = 8200746117  # Belo'nun ID'si eklendi
+BELO_ID = 8200746117
 
 itiraflar = []
 HEDEF_GRUP_ID = None
 
 
-# --- 3. KESİNTİSİZ ASTROLOJİ MOTORU ---
+# --- 3. PRO ASTROLOJİ HAVUZU ---
 BURC_ISIMLERI = {
     'koc': 'Koç',
     'boga': 'Boğa',
@@ -50,22 +51,117 @@ BURC_ISIMLERI = {
     'balik': 'Balık',
 }
 
-MODLAR = [
-    'Bugün gökyüzü seni enerjik ve kararlı kılıyor. Ertelediğin işlerin üzerine gitmek için harika bir gün.',
-    'İletişim kanallarının açık olduğu bir gün. Yakın çevrenden alacağın haberler modunu yükseltebilir.',
-    'Maddi ve duygusal konularda denge kurman gereken bir süreçtesin. Acele kararlar almaktan kaçın.',
-    'Zihnin oldukça aktif ve yaratıcı. Kafandaki planları hayata geçirmek için doğru adımları atabilirsin.',
-    'Bugün biraz kendi kabuğuna çekilip dinlenmek isteyebilirsin. Sezgilerine güven, seni yanıltmayacak.',
-    'Sosyal çevrenle ve arkadaşlarınla ilişkilerinin ön plana çıktığı, keyifli sohbetlerin döneceği bir gün.',
-    'Detaylara olan dikkatin sayesinde gözden kaçan bir noktayı yakalayacaksın. İpleri elinde tut.',
+GENEL_DURUM = [
+    (
+        'Yönetici gezegeninin açıları bugün sana içsel bir huzur ve yüksek bir'
+        ' farkındalık getiriyor. Sezgilerine güven.'
+    ),
+    (
+        'Bugün gökyüzü, geçmişte bıraktığını sandığın bazı konuları tekrar'
+        ' gündeme getirebilir. Sakin kalmalı ve mantığını kullanmalısın.'
+    ),
+    (
+        'Enerjinin çok yüksek olduğu bir gün! Çevrendekileri motive eden, lider'
+        ' ruhunu ortaya koyan bir tavrın var.'
+    ),
+    (
+        "Ay'ın konumu duygusal olarak dalgalanmalara açık olduğunu gösteriyor."
+        ' Olaylara objektif bir pencereden bakmaya çalış.'
+    ),
+    (
+        'Uzun zamandır zihnini kurcalayan o belirsizlik bugün yerini net'
+        ' kararlara bırakıyor. Harekete geçmek için doğru zaman.'
+    ),
+    (
+        'Güne hafif bir yorgunlukla başlasan da öğleden sonra alacağın ufak bir'
+        ' haberle tüm enerjin değişebilir.'
+    ),
+    (
+        'Bugün yıldızlar, konfor alanından çıkman için seni destekliyor. Yeni'
+        ' başlangıçlara ve risklere açıksın.'
+    ),
+    (
+        'İletişim evindeki hareketlilik, bugün yanlış anlaşılmalara yol açabilir.'
+        ' Söylediklerine ve mesajlarına ekstra dikkat et.'
+    ),
+    (
+        'Beklemediğin insanlardan destek göreceğin, şansın senden yana olduğu'
+        ' oldukça pozitif bir gün.'
+    ),
+    (
+        'Zihnin çok yoğun. Her şeyi aynı anda düşünmek yerine işleri sıraya'
+        ' koyarsan çok daha rahat edeceksin.'
+    ),
 ]
 
-TAVSIYELER = [
-    'Günün tavsiyesi: Küçük aksiliklere takılmak yerine büyük resme odaklanmayı dene.',
-    'Günün tavsiyesi: İç sesini dinle ama fevri çıkışlar yapmamaya gayret et.',
-    'Günün tavsiyesi: Güvendiğin insanlarla istişare etmek sana farklı bir bakış açısı kazandıracak.',
-    'Günün tavsiyesi: Enerjini seni aşağı çeken şeylere değil, hedeflerine harca.',
-    'Günün tavsiyesi: Akşam saatlerinde kendine zaman ayırıp zihnini boşaltmayı unutma.',
+IS_PARA = [
+    (
+        'Kariyer evindeki olumlu etkileşimler, uzun süredir beklediğin takdiri'
+        ' görmeni sağlayabilir.'
+    ),
+    (
+        'Maddi konularda beklenmedik harcamalar çıkabilir, bütçeni kontrol'
+        ' altında tutmakta fayda var.'
+    ),
+    (
+        'İş yerinde veya okulda üstlendiğin sorumluluklar artabilir, ancak'
+        ' disiplinli yapınla hepsinin üstesinden geleceksin.'
+    ),
+    (
+        'Yaratıcılığının zirvesinde olduğun bir dönem. Yeni projeler üretmek'
+        ' veya parlak fikirlerini sunmak için harika bir gün.'
+    ),
+    (
+        'Bugün finansal konularda risk almaktan kaçınmalı, elindeki kaynakları'
+        ' korumaya odaklanmalısın.'
+    ),
+    (
+        'Ortaklı işlerde veya takım çalışmalarında parlayacağın, sözünün'
+        ' dinleneceği bir gündesin.'
+    ),
+    (
+        'Uzun vadeli hedeflerin için bugün atacağın ufak bir adım, ileride büyük'
+        ' kazançlara dönüşebilir.'
+    ),
+    (
+        'Gereksiz detaylara takılıp vakit kaybedebilirsin. Odak noktanı büyük'
+        ' resme çevirmelisin.'
+    ),
+]
+
+ASK_ILISKI = [
+    (
+        'İkili ilişkilerde romantizmin ve tutkunun arttığı bir gün. Karşındaki'
+        ' kişiyle arandaki bağ güçleniyor.'
+    ),
+    (
+        'Aşk hayatında iletişim sorunları yaşanabilir. Karşındakini dinlemeden'
+        ' fevri tepkiler vermekten kaçınmalısın.'
+    ),
+    (
+        'Eğer yalnızsan, sosyal çevrende katılacağın bir ortamda beklemediğin'
+        ' kadar etkileyici biriyle tanışabilirsin.'
+    ),
+    (
+        'İlişkilerinde gereksiz kıskançlıklar veya kuruntular yüzünden kendini'
+        ' yıpratma. Akışta kalmak en iyisi.'
+    ),
+    (
+        'Sevdiklerine zaman ayırmak, değer verdiğin insanlarla dertleşmek bugün'
+        ' ruhuna ilaç gibi gelecek.'
+    ),
+    (
+        'Geçmişten gelen bir mesaj veya karşılaşma kafanı karıştırabilir, eski'
+        ' defterleri açmadan önce iyi düşün.'
+    ),
+    (
+        'Duygularını açıkça ifade etmekten çekinme. Bugün dürüstlük sana'
+        ' partnerinle aranda yepyeni kapılar açacak.'
+    ),
+    (
+        'Kendi iç dünyana çekilip ilişkilerini sorgulayabilirsin. Kendi'
+        ' değerini bilerek hareket et.'
+    ),
 ]
 
 
@@ -73,7 +169,7 @@ TAVSIYELER = [
 async def otomatik_duyuru(app):
     global HEDEF_GRUP_ID
     while True:
-        await asyncio.sleep(1800)  # 30 dakika
+        await asyncio.sleep(1800)
         if HEDEF_GRUP_ID:
             try:
                 duyuru_metni = (
@@ -134,7 +230,8 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
             'Lütfen bir burç adı yazın. Örnek: /burc koc\n'
-            'Kullanabileceğin burçlar: koc, boga, ikizler, yengec, aslan, basak, terazi, akrep, yay, oglak, kova, balik'
+            'Burçlar: koc, boga, ikizler, yengec, aslan, basak, terazi, akrep,'
+            ' yay, oglak, kova, balik'
         )
         return
 
@@ -155,23 +252,34 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
         )
         return
 
-    # Günün tarihine göre dinamik yorum oluşturur
-    bugun = datetime.now()
-    gun_kodu = bugun.year + bugun.month + bugun.day + ord(burc_key[0])
-
-    mod_idx = gun_kodu % len(MODLAR)
-    tavsiye_idx = (gun_kodu * 3) % len(TAVSIYELER)
-
     burc_adi = BURC_ISIMLERI[burc_key]
-    tarih_str = bugun.strftime('%d.%m.%Y')
+    bugun_str = datetime.now().strftime('%Y-%m-%d')
+    tarih_str = datetime.now().strftime('%d.%m.%Y')
 
-    mesaj = (
-        f'🔮 **{burc_adi.upper()} BURCU GÜNLÜK YORUMU ({tarih_str}):**\n\n'
-        f'{MODLAR[mod_idx]}\n\n'
-        f'💡 {TAVSIYELER[tavsiye_idx]}'
+    h_genel = int(
+        hashlib.md5(f'{bugun_str}-{burc_key}-genel'.encode('utf-8')).hexdigest(),
+        16,
+    )
+    h_is = int(
+        hashlib.md5(f'{bugun_str}-{burc_key}-is'.encode('utf-8')).hexdigest(), 16
+    )
+    h_ask = int(
+        hashlib.md5(f'{bugun_str}-{burc_key}-ask'.encode('utf-8')).hexdigest(),
+        16,
     )
 
-    await update.message.reply_text(mesaj, parse_mode='Markdown')
+    idx_genel = h_genel % len(GENEL_DURUM)
+    idx_is = h_is % len(IS_PARA)
+    idx_ask = h_ask % len(ASK_ILISKI)
+
+    mesaj = (
+        f'🔮 {burc_adi.upper()} BURCU GÜNLÜK YORUMU ({tarih_str}):\n\n'
+        f'✨ Genel Durum:\n{GENEL_DURUM[idx_genel]}\n\n'
+        f'💼 İş ve Para:\n{IS_PARA[idx_is]}\n\n'
+        f'❤️ Aşk ve İlişkiler:\n{ASK_ILISKI[idx_ask]}'
+    )
+
+    await update.message.reply_text(mesaj)
 
 
 # 🏷️ BELO VE FEHMİ ETİKETLEME
@@ -199,7 +307,6 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     zaman = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
-
     numarali_itiraf = f'📢 ANONİM İTİRAF:\n\n{metin}'
     itiraflar.append(numarali_itiraf)
 
