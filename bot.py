@@ -1,6 +1,8 @@
 from datetime import datetime
 import os
+import re
 import threading
+import xml.etree.ElementTree as ET
 from flask import Flask
 import requests
 from telegram import BotCommand, Update
@@ -62,7 +64,7 @@ async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
-# 🔮 GÜNLÜK BURÇ YORUMU (Kesintisiz JSON API)
+# 🔮 GÜNLÜK BURÇ YORUMU (Resmi Türkçe RSS Akışı - Kesintisiz)
 async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
@@ -82,61 +84,56 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     burc = tr_map.get(burc, burc)
 
-    gecerli_burclar = [
-        'koc',
-        'boga',
-        'ikizler',
-        'yengec',
-        'aslan',
-        'basak',
-        'terazi',
-        'akrep',
-        'yay',
-        'oglak',
-        'kova',
-        'balik',
-    ]
+    burc_isimleri = {
+        'koc': 'Koç',
+        'boga': 'Boğa',
+        'ikizler': 'İkizler',
+        'yengec': 'Yengeç',
+        'aslan': 'Aslan',
+        'basak': 'Başak',
+        'terazi': 'Terazi',
+        'akrep': 'Akrep',
+        'yay': 'Yay',
+        'oglak': 'Oğlak',
+        'kova': 'Kova',
+        'balik': 'Balık',
+    }
 
-    if burc not in gecerli_burclar:
+    if burc not in burc_isimleri:
         await update.message.reply_text(
             '⚠️ Geçersiz burç adı. Örnek kullanım: /burc koc'
         )
         return
 
     try:
-        # Doğrudan açık API servisinden veriyi JSON olarak çeker
-        url = f'https://api.statick.org/horoscope/{burc}'
-        res = requests.get(url, timeout=5)
+        # Haber7 Resmi Astroloji RSS Akışı
+        url = 'https://siteneekle.haber7.com/rss/astroloji.xml'
+        headers = {'User-Agent': 'Mozilla/5.0'}
+        res = requests.get(url, headers=headers, timeout=5)
 
         if res.status_code == 200:
-            data = res.json()
-            yorum = data.get('horoscope') or data.get('text') or data.get('yorum')
-            if yorum:
-                await update.message.reply_text(
-                    f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
-                )
-                return
+            root = ET.fromstring(res.content)
+            hedef_isim = burc_isimleri[burc]
 
-        # Yedek açık API servisi
-        url_yedek = f'https://horoscope-api.herokuapp.com/horoscope/today/{burc}'
-        res_yedek = requests.get(url_yedek, timeout=5)
-        if res_yedek.status_code == 200:
-            data = res_yedek.json()
-            yorum = data.get('horoscope')
-            if yorum:
-                await update.message.reply_text(
-                    f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
-                )
-                return
+            for item in root.findall('.//item'):
+                title = item.find('title')
+                description = item.find('description')
 
-        await update.message.reply_text(
-            '⚠️ Burç servisi yanıt vermedi, lütfen tekrar deneyin.'
-        )
+                if title is not None and hedef_isim.lower() in title.text.lower():
+                    if description is not None and description.text:
+                        # HTML etiketlerini ve CDATA yapılarını temizle
+                        metin = re.sub(r'<[^<]+?>', '', description.text).strip()
+                        metin = metin.replace('&nbsp;', ' ')
+                        
+                        await update.message.reply_text(
+                            f'🔮 **{hedef_isim.upper()} BURCU GÜNLÜK YORUMU:**\n\n{metin}'
+                        )
+                        return
+
+        await update.message.reply_text('⚠️ Bugün için burç yorumu henüz güncellenmedi.')
 
     except Exception:
-        await update.message.reply_text(
-            '⚠️ Burç yorumu çekilirken bir bağlantı hatası oluştu.'
-        )
+        await update.message.reply_text('⚠️ Burç yorumu alınırken bir hata oluştu.')
 
 
 # 🏷️ BELO ETİKETLEME
