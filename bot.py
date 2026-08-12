@@ -1,12 +1,14 @@
+from datetime import datetime
+import json
 import os
 import threading
 import time
-from datetime import datetime
 from flask import Flask
+import requests
 from telegram import BotCommand, Update
 from telegram.ext import ApplicationBuilder, CommandHandler, ContextTypes
 
-# --- 1. RENDER İÇİN MİNİK WEB SUNUCUSU ---
+# --- 1. RENDER İÇİN WEB SUNUCUSU ---
 app_web = Flask('')
 
 
@@ -24,23 +26,86 @@ def keep_alive():
     t.start()
 
 
-# --- 2. BOT AYARLARI VE DEĞİŞKENLER ---
+# --- 2. BOT AYARLARI VE KALICI VERİ DEPOLAMA ---
 ADMIN_ID = 8200746117
 TOKEN = '8870037601:AAFmFTITU4Fi9H2wrXZpu1tRNfjOT4DXCxw'
 MOLA_SURESI = 5
+DATA_FILE = 'data.json'
 
-itiraflar = []
-itiraf_sayaci = 1
+
+def veri_yukle():
+    if os.path.exists(DATA_FILE):
+        try:
+            with open(DATA_FILE, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                return data.get('itiraflar', []), data.get('itiraf_sayaci', 1)
+        except Exception:
+            pass
+    return [], 1
+
+
+def veri_kaydet():
+    with open(DATA_FILE, 'w', encoding='utf-8') as f:
+        json.dump(
+            {'itiraflar': itiraflar, 'itiraf_sayaci': itiraf_sayaci},
+            f,
+            ensure_ascii=False,
+            indent=2,
+        )
+
+
+itiraflar, itiraf_sayaci = veri_yukle()
 son_itiraf_zamani = 0
 
 
-# --- 3. BOT FONKSİYONLARI ---
+# --- 3. KOMUTLAR VE OTOMATİK MENÜ TANIMLARI ---
 async def post_init(app):
     komutlar = [
         BotCommand('itiraf', 'Anonim itiraf gönder (Sadece özel mesajda)'),
         BotCommand('itirafgetir', 'Havuza eklenen itirafı gruba getir'),
+        BotCommand(
+            'havadurumu', 'Anlık hava durumunu öğren (Örn: /havadurumu izmit)'
+        ),
+        BotCommand('hava', 'Hava durumunu öğren (Kısa kullanım)'),
+        BotCommand('doviz', 'Anlık Dolar, Euro ve Altın fiyatları'),
     ]
     await app.bot.set_my_commands(komutlar)
+
+
+async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    sehir = ' '.join(context.args) if context.args else 'Izmit'
+    try:
+        url = f'https://wttr.in/{sehir}?format=%C+%t+%w&lang=tr'
+        res = requests.get(url, timeout=5)
+        if res.status_code == 200 and 'Unknown' not in res.text:
+            mesaj = f'🌤️ **{sehir.capitalize()} için Hava Durumu:**\n\n{res.text.strip()}'
+        else:
+            mesaj = '⚠️ Şehir bulunamadı. Lütfen geçerli bir şehir adı yazın. (Örn: `/havadurumu izmit`)'
+    except Exception:
+        mesaj = '⚠️ Hava durumu bilgisi alınırken bir hata oluştu.'
+
+    await update.message.reply_text(mesaj, parse_mode='Markdown')
+
+
+async def doviz_bilgisi(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    try:
+        res = requests.get(
+            'https://api.genelpara.com/embed/doviz.json', timeout=5
+        ).json()
+        usd_al, usd_sat = res['USD']['alis'], res['USD']['satis']
+        eur_al, eur_sat = res['EUR']['alis'], res['EUR']['satis']
+        ga_al, ga_sat = res['GA']['alis'], res['GA']['satis']
+
+        mesaj = (
+            f'📊 **ANLIK PIYASA VERİLERİ**\n\n'
+            f'💵 **Dolar (USD):** Alış: {usd_al} TL | Satış: {usd_sat} TL\n'
+            f'💶 **Euro (EUR):** Alış: {eur_al} TL | Satış: {eur_sat} TL\n'
+            f'🏆 **Gram Altın:** Alış: {ga_al} TL | Satış: {ga_sat} TL'
+        )
+    except Exception:
+        mesaj = '⚠️ Piyasa verileri çekilemedi, lütfen tekrar deneyin.'
+
+    await update.message.reply_text(mesaj, parse_mode='Markdown')
 
 
 async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -65,6 +130,8 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
     numarali_itiraf = f'📢 **ANONİM İTİRAF #{itiraf_sayaci}:**\n\n{metin}'
     itiraflar.append(numarali_itiraf)
     itiraf_sayaci += 1
+
+    veri_kaydet()
 
     if ADMIN_ID != 0:
         admin_mesaj = (
@@ -93,7 +160,7 @@ async def itiraf_getir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if gecen_sure < MOLA_SURESI:
         kalan_saniye = int(MOLA_SURESI - gecen_sure)
         await update.message.reply_text(
-            f'⏳ Biraz yavaşla! Yeni bir itiraf getirmek için {kalan_saniye} saniye beklemeniz gerekiyor.'
+            f'⏳ Biraz yavaşla! {kalan_saniye} saniye beklemeniz gerekiyor.'
         )
         return
 
@@ -104,14 +171,20 @@ async def itiraf_getir(update: Update, context: ContextTypes.DEFAULT_TYPE):
     son_itiraf_zamani = su_an
     siradaki_itiraf = itiraflar.pop(0)
 
+    veri_kaydet()
+
     await update.message.reply_text(siradaki_itiraf)
 
 
 if __name__ == '__main__':
-    keep_alive()  # Web sunucusunu başlatır
+    keep_alive()
     app = ApplicationBuilder().token(TOKEN).post_init(post_init).build()
+
     app.add_handler(CommandHandler('itiraf', itiraf_et))
     app.add_handler(CommandHandler('itirafgetir', itiraf_getir))
+    app.add_handler(CommandHandler('havadurumu', hava_durumu))
+    app.add_handler(CommandHandler('hava', hava_durumu))
+    app.add_handler(CommandHandler('doviz', doviz_bilgisi))
 
-    print('Bot 7/24 sunucu modunda çalışıyor!')
+    print('Bot güncellendi ve menü komutlarıyla aktif!')
     app.run_polling()
