@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import re
 import threading
 from flask import Flask
 import requests
@@ -37,14 +38,13 @@ async def post_init(app):
         BotCommand('itiraf', 'Anonim itiraf gönder (Sadece özel mesajda)'),
         BotCommand('itirafgetir', 'Havuza eklenen itirafı gruba getir'),
         BotCommand('hava', 'Hava durumunu öğren (Örn: /hava izmit)'),
-        BotCommand('doviz', 'Anlık Dolar, Euro ve Altın fiyatları'),
         BotCommand('burc', 'Günlük burç yorumu (Örn: /burc koc)'),
         BotCommand('belo', 'Belo ve Fehmiyi etiketler'),
     ]
     await app.bot.set_my_commands(komutlar)
 
 
-# 🌤️ HAVA DURUMU (Sadece /hava)
+# 🌤️ HAVA DURUMU
 async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sehir = ' '.join(context.args) if context.args else 'Izmit'
     try:
@@ -63,29 +63,7 @@ async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
-# 💱 DÖVİZ
-async def doviz_bilgisi(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        res = requests.get(
-            'https://api.genelpara.com/embed/doviz.json', timeout=5
-        ).json()
-        usd_al, usd_sat = res['USD']['alis'], res['USD']['satis']
-        eur_al, eur_sat = res['EUR']['alis'], res['EUR']['satis']
-        ga_al, ga_sat = res['GA']['alis'], res['GA']['satis']
-
-        mesaj = (
-            f'📊 ANLIK PIYASA VERİLERİ\n\n'
-            f'💵 Dolar (USD): Alış: {usd_al} TL | Satış: {usd_sat} TL\n'
-            f'💶 Euro (EUR): Alış: {eur_al} TL | Satış: {eur_sat} TL\n'
-            f'🏆 Gram Altın: Alış: {ga_al} TL | Satış: {ga_sat} TL'
-        )
-    except Exception:
-        mesaj = '⚠️ Piyasa verileri çekilemedi, lütfen tekrar deneyin.'
-
-    await update.message.reply_text(mesaj)
-
-
-# 🔮 GÜNLÜK BURÇ YORUMU
+# 🔮 GÜNLÜK BURÇ YORUMU (Kesintisiz Web Scraping)
 async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
@@ -95,7 +73,6 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     burc = context.args[0].lower().strip()
-    # Türkçe karakter dönüştürme
     tr_map = {
         'koç': 'koc',
         'boğa': 'boga',
@@ -106,35 +83,65 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     burc = tr_map.get(burc, burc)
 
+    gecerli_burclar = [
+        'koc',
+        'boga',
+        'ikizler',
+        'yengec',
+        'aslan',
+        'basak',
+        'terazi',
+        'akrep',
+        'yay',
+        'oglak',
+        'kova',
+        'balik',
+    ]
+
+    if burc not in gecerli_burclar:
+        await update.message.reply_text(
+            '⚠️ Geçersiz burç adı. Örnek kullanım: /burc koc'
+        )
+        return
+
+    headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+        )
+    }
+    yorum = None
+
     try:
-        url = f'https://astrology-api-ce89.onrender.com/burc/{burc}'
-        res = requests.get(url, timeout=5)
+        url = f'https://www.mynet.com/astroloji/{burc}-burcu-gunluk-yorumu/'
+        res = requests.get(url, headers=headers, timeout=5)
 
         if res.status_code == 200:
-            data = res.json()
-            yorum = data.get('yorum', 'Yorum bulunamadı.')
-            mesaj = f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
-        else:
-            # Alternatif servis
-            res_alt = requests.get(
-                f'https://burc-api.vercel.app/burc/{burc}', timeout=5
-            )
-            if res_alt.status_code == 200:
-                yorum = res_alt.json().get('yorum', 'Yorum bulunamadı.')
-                mesaj = f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
-            else:
-                mesaj = '⚠️ Geçersiz burç adı veya servise ulaşılamıyor.'
-    except Exception:
-        mesaj = (
-            '⚠️ Burç yorumu çekilirken bir hata oluştu. Örnek: `/burc koc`'
-        )
+            match = re.search(r'<p class="mb-3">(.*?)</p>', res.text, re.DOTALL)
+            if not match:
+                match = re.search(
+                    r'<div class="detail-content.*?<p>(.*?)</p>',
+                    res.text,
+                    re.DOTALL,
+                )
 
-    await update.message.reply_text(mesaj)
+            if match:
+                yorum = re.sub(r'<[^<]+?>', '', match.group(1)).strip()
+    except Exception:
+        pass
+
+    if yorum:
+        await update.message.reply_text(
+            f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
+        )
+    else:
+        await update.message.reply_text(
+            '⚠️ Burç yorumu şu an çekilemiyor, lütfen az sonra tekrar deneyin.'
+        )
 
 
 # 🏷️ BELO ETİKETLEME
 async def belo_etiketle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('@belo @fehmi99')
+    await update.message.reply_text('belo @fehmi99')
 
 
 # 📩 İTİRAF SİSTEMİ
@@ -192,9 +199,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('itiraf', itiraf_et))
     app.add_handler(CommandHandler('itirafgetir', itiraf_getir))
     app.add_handler(CommandHandler('hava', hava_durumu))
-    app.add_handler(CommandHandler('doviz', doviz_bilgisi))
     app.add_handler(CommandHandler('burc', burc_yorum))
     app.add_handler(CommandHandler('belo', belo_etiketle))
 
-    print('Bot hafifletilmiş modda aktif!')
+    print('Bot aktif!')
     app.run_polling()
