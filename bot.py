@@ -180,11 +180,11 @@ ASK_ILISKI = [
 async def otomatik_duyuru(app):
     global HEDEF_GRUP_ID
     while True:
-        await asyncio.sleep(1800)
+        await asyncio.sleep(600)
         if HEDEF_GRUP_ID:
             try:
                 duyuru_metni = (
-                    'İTİRAF BOT 1.0 OLARAK HALİT KAPTANIN ARKASINDAYIZ'
+                    'HALK KAZANDI MİLLET KAZANDI DEVLET KAZANDI KAPTAN HALİT TUĞRUL OYLARIN %51'ini ALARAK TEK BAŞINA İKTİDAR'
                 )
                 await app.bot.send_message(
                     chat_id=HEDEF_GRUP_ID, text=duyuru_metni
