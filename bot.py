@@ -43,6 +43,7 @@ HEDEF_GRUP_ID = None
 
 # Gruptaki kullanıcıları ID ve Ad olarak tutan hafıza
 grup_uyeleri = {}
+gunun_cifti_hafiza = {}
 
 
 # --- 3. PRO ASTROLOJİ HAVUZU ---
@@ -309,40 +310,41 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
 # ❤️ GÜNÜN ÇİFTİ KOMUTU
 async def gunun_cifti(update: Update, context: ContextTypes.DEFAULT_TYPE):
     grup_ve_kullanici_kaydet(update)
-
     if update.effective_chat.type not in ['group', 'supergroup']:
-        await update.message.reply_text(
-            'Bu komut sadece gruplarda kullanılabilir!'
-        )
+        await update.message.reply_text("Bu komut sadece gruplarda çalışır.")
         return
 
     chat_id = update.effective_chat.id
     uyeler = grup_uyeleri.get(chat_id, {})
 
     if len(uyeler) < 2:
-        await update.message.reply_text(
-            '⚠️ Günün çiftini seçebilmem için gruptan en az 2 kişinin mesaj'
-            ' yazmış olması gerekiyor!'
-        )
+        await update.message.reply_text("⚠️ Günün çiftini seçmek için grupta en az 2 kişinin mesaj yazmış olması gerekir.")
         return
 
-    secilenler = random.sample(list(uyeler.items()), 2)
-    kisi1_id, kisi1_adi = secilenler[0]
-    kisi2_id, kisi2_adi = secilenler[1]
-
+    bugun_str = datetime.now().strftime('%Y-%m-%d')
     tarih_str = datetime.now().strftime('%d.%m.%Y')
-    uyum = random.randint(85, 100)
+
+    # Eğer bugün bu grup için zaten çift seçildiyse hafızadan getir
+    if chat_id in gunun_cifti_hafiza and gunun_cifti_hafiza[chat_id]['tarih'] == bugun_str:
+        secilenler = gunun_cifti_hafiza[chat_id]['cift']
+        uyum = gunun_cifti_hafiza[chat_id]['uyum']
+    else:
+        # Bugün henüz seçilmediyse yeni çift seç ve kaydet
+        secilenler = random.sample(list(uyeler.items()), 2)
+        uyum = random.randint(85, 100)
+        gunun_cifti_hafiza[chat_id] = {
+            'tarih': bugun_str,
+            'cift': secilenler,
+            'uyum': uyum
+        }
 
     mesaj = (
-        f'💘 GÜNÜN ÇİFTİ ({tarih_str}) 💘\n\n'
-        f'Yıldızlar bugün bu iki güzel insanı işaret ediyor:\n\n'
-        f'👩‍❤️‍👨 {kisi1_adi}  +  {kisi2_adi}\n\n'
-        f'Uyum Derecesi: %{uyum} 🔥\n'
-        f'Tebrikler! 🎉'
+        f"💘 GÜNÜN ÇİFTİ ({tarih_str}) 💘\n\n"
+        f"👩‍❤️‍👨 {secilenler[0][1]}  +  {secilenler[1][1]}\n\n"
+        f"Uyum Derecesi: %{uyum} 🔥\n"
+        f"Harikasınız Bebeğim! 🎉"
     )
-
     await update.message.reply_text(mesaj)
-
 
 # 🏷️ BELO VE FEHMİ ETİKETLEME
 async def belo_etiketle(update: Update, context: ContextTypes.DEFAULT_TYPE):
