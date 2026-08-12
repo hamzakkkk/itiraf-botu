@@ -1,5 +1,6 @@
 from datetime import datetime
 import os
+import re
 import threading
 from flask import Flask
 import requests
@@ -24,74 +25,11 @@ def keep_alive():
     t.start()
 
 
-# --- 2. BOT AYARLARI VE DAHİLİ BURÇ YORUMLARI ---
+# --- 2. BOT AYARLARI ---
 ADMIN_ID = 8200746117
 TOKEN = '8870037601:AAFmFTITU4Fi9H2wrXZpu1tRNfjOT4DXCxw'
 
 itiraflar = []
-
-BURC_YORUMLARI = {
-    'koc': [
-        'Bugün enerjin oldukça yüksek! Karar alırken acele etmemeye çalış, sabırlı olmak kazandıracak.',
-        'İletişimde açık olman gereken bir gün. Yakın çevrenle küçük fikir ayrılıkları yaşanabilir.',
-        'Kariyer ve kişisel hedeflerinde sürpriz gelişmeler olabilir. Şans senden yana!',
-    ],
-    'boga': [
-        'Maddi konularda temkinli olmanda fayda var. Bugün kendine vakit ayırmak sana çok iyi gelecek.',
-        'Sakinliğin sayesinde karmaşık bir durumu kolayca çözeceksin. Akşam saatleri sürprizlere açık.',
-        'Güvendiğin insanlarla vakit geçirmek enerjini yenileyecek. Yeni fırsatlar kapıda.',
-    ],
-    'ikizler': [
-        'Zihnin çok aktif! Yeni fikirler üretebilir, ertelediğin işleri hızlıca tamamlayabilirsin.',
-        'Sosyal çevrenle iletişiminin yoğun olacağı bir gün. Yeni haberler alabilirsin.',
-        'Duygusal ve mantıksal kararlar arasında kalabilirsin, hislerine güven.',
-    ],
-    'yengec': [
-        'Duygusal derinliğinin yüksek olduğu bir gün. Sevdiklerine vakit ayırmak huzur verecek.',
-        'Sezgilerin bugün çok güçlü. Karar verirken iç sesini dinlemeyi unutma.',
-        'Kendini ifade etmekte zorlanmadığın, motivasyonunun yüksek olduğu bir gün.',
-    ],
-    'aslan': [
-        'Liderlik özelliklerin ön plana çıkıyor. Çevrendekilerin takdirini toplayacaksın.',
-        'Özgüveninin yüksek olduğu bir gün ancak ego çatışmalarına dikkat etmelisin.',
-        'Yaratıcılığını kullanabileceğin işlerde büyük başarılar elde edebilirsin.',
-    ],
-    'basak': [
-        'Detaylara olan dikkatin sayesinde bir hatayı önceden fark edeceksin. Düzen şart!',
-        'Sağlığına ve beslenmene dikkat etmen gereken bir gün. Zihnini dinlendirmeyi dene.',
-        'Planlı hareket etmek sana zaman kazandıracak. İşlerini sırayla hallet.',
-    ],
-    'terazi': [
-        'Denge ve uyum arayışındasın. Kararsız kaldığın konularda güvendiğin birine danış.',
-        'İlişkilerde güzel gelişmeler var. Tatlı dilinle çözemeyeceğin sorun yok.',
-        'Sanatsal ve estetik konulara olan ilgin artabilir, kendini şımart.',
-    ],
-    'akrep': [
-        'Tutkulu ve kararlı duruşun sayesinde istediğin bir konuyu çözüme kavuşturacaksın.',
-        'Gizemli konular ilgini çekebilir. Şüpheci yaklaşmak yerine akışa bırak.',
-        'Odaklandığın işlerde derinlemesine başarı yakalayabileceğin bir gün.',
-    ],
-    'yay': [
-        'Özgürlük arzun yüksek. Yeni şeyler öğrenmek veya plan yapmak isteyebilirsin.',
-        'Pozitif enerjin çevrene de yansıyor. Günün getirdiği fırsatları kaçırma.',
-        'İyimser tutumun sayesinde engelleri kolayca aşacaksın.',
-    ],
-    'oglak': [
-        'Disiplinli ve odaklısın. Uzun süredir emek verdiğin bir konuda meyve yiyebilirsin.',
-        'Sorumlulukların artabilir ama planlı davranırsan hepsinin üstesinden gelirsin.',
-        'Geleceğe yönelik sağlam adımlar atabileceğin verimli bir gün.',
-    ],
-    'kova': [
-        'Farklı ve yenilikçi fikirlerinle dikkat çekeceksin. Sıradışı olmaktan korkma.',
-        'Arkadaş gruplarınla eğlenceli vakit geçirebilirsin. Paylaşımlar önemli.',
-        'Zihnini özgür bırak, yeni projelere başlamak için harika bir gün.',
-    ],
-    'balik': [
-        'Hayal gücün ve empati yeteneğin zirvede. Sanatsal işler için harika bir gün.',
-        'İç dünyandaki huzuru korumaya çalış. Geçmişe takılmak yerine önüne bak.',
-        'Romantik ve duygusal sürprizlere açık ol, sezgilerin seni yanıltmayacak.',
-    ],
-}
 
 
 # --- 3. KOMUTLAR VE OTOMATİK MENÜ ---
@@ -100,13 +38,13 @@ async def post_init(app):
         BotCommand('itiraf', 'Anonim itiraf gönder (Sadece özel mesajda)'),
         BotCommand('itirafgetir', 'Havuza eklenen itirafı gruba getir'),
         BotCommand('hava', 'Hava durumunu öğren (Örn: /hava izmit)'),
-        BotCommand('doviz', 'Anlık Dolar, Euro ve Altın fiyatları'),
         BotCommand('burc', 'Günlük burç yorumu (Örn: /burc koc)'),
         BotCommand('belo', 'Belo ve Fehmiyi etiketler'),
     ]
     await app.bot.set_my_commands(komutlar)
 
 
+# 🌤️ HAVA DURUMU (Sadece /hava)
 async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     sehir = ' '.join(context.args) if context.args else 'Izmit'
     try:
@@ -125,27 +63,7 @@ async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
-async def doviz_bilgisi(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    try:
-        res = requests.get(
-            'https://api.genelpara.com/embed/doviz.json', timeout=5
-        ).json()
-        usd_al, usd_sat = res['USD']['alis'], res['USD']['satis']
-        eur_al, eur_sat = res['EUR']['alis'], res['EUR']['satis']
-        ga_al, ga_sat = res['GA']['alis'], res['GA']['satis']
-
-        mesaj = (
-            f'📊 ANLIK PIYASA VERİLERİ\n\n'
-            f'💵 Dolar (USD): Alış: {usd_al} TL | Satış: {usd_sat} TL\n'
-            f'💶 Euro (EUR): Alış: {eur_al} TL | Satış: {eur_sat} TL\n'
-            f'🏆 Gram Altın: Alış: {ga_al} TL | Satış: {ga_sat} TL'
-        )
-    except Exception:
-        mesaj = '⚠️ Piyasa verileri çekilemedi, lütfen tekrar deneyin.'
-
-    await update.message.reply_text(mesaj)
-
-
+# 🔮 CANLI GÜNLÜK BURÇ YORUMU (Elle Astroloji Scraping)
 async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
@@ -165,26 +83,75 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     burc = tr_map.get(burc, burc)
 
-    if burc not in BURC_YORUMLARI:
+    # Elle sitesindeki burç isim haritası
+    elle_map = {
+        'koc': 'koc-burcu',
+        'boga': 'boga-burcu',
+        'ikizler': 'ikizler-burcu',
+        'yengec': 'yengec-burcu',
+        'aslan': 'aslan-burcu',
+        'basak': 'basak-burcu',
+        'terazi': 'terazi-burcu',
+        'akrep': 'akrep-burcu',
+        'yay': 'yay-burcu',
+        'oglak': 'oglak-burcu',
+        'kova': 'kova-burcu',
+        'balik': 'balik-burcu',
+    }
+
+    if burc not in elle_map:
         await update.message.reply_text(
             '⚠️ Geçersiz burç adı. Örnek kullanım: /burc koc'
         )
         return
 
-    bugun_str = datetime.now().strftime('%Y-%m-%d')
-    gun_sayisi = sum(ord(c) for c in bugun_str)
-    index = gun_sayisi % len(BURC_YORUMLARI[burc])
-    yorum = BURC_YORUMLARI[burc][index]
+    headers = {
+        'User-Agent': (
+            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+            ' (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
+        )
+    }
 
-    await update.message.reply_text(
-        f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
-    )
+    try:
+        url = f'https://www.elle.com.tr/astroloji/{elle_map[burc]}'
+        res = requests.get(url, headers=headers, timeout=6)
+
+        if res.status_code == 200:
+            # HTML içinden günlük paragrafı çekme
+            match = re.search(
+                r'<div class="standard-body-item[^"]*">(.*?)</div>',
+                res.text,
+                re.DOTALL,
+            )
+            if not match:
+                match = re.search(r'<p>(.*?)</p>', res.text, re.DOTALL)
+
+            if match:
+                yorum = re.sub(r'<[^<]+?>', '', match.group(1)).strip()
+                # Çok uzun metinleri temizleme
+                if len(yorum) > 800:
+                    yorum = yorum[:800] + '...'
+                await update.message.reply_text(
+                    f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
+                )
+                return
+
+        await update.message.reply_text(
+            '⚠️ Burç yorumu şu an çekilemedi, lütfen tekrar deneyin.'
+        )
+
+    except Exception:
+        await update.message.reply_text(
+            '⚠️ Bağlantı hatası oluştu, lütfen tekrar deneyin.'
+        )
 
 
+# 🏷️ BELO ETİKETLEME
 async def belo_etiketle(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text('belo @fehmi99')
 
 
+# 📩 İTİRAF SİSTEMİ
 async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if update.effective_chat.type != 'private':
         await update.message.reply_text(
@@ -239,9 +206,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('itiraf', itiraf_et))
     app.add_handler(CommandHandler('itirafgetir', itiraf_getir))
     app.add_handler(CommandHandler('hava', hava_durumu))
-    app.add_handler(CommandHandler('doviz', doviz_bilgisi))
     app.add_handler(CommandHandler('burc', burc_yorum))
     app.add_handler(CommandHandler('belo', belo_etiketle))
 
-    print('Bot aktif!')
+    print('Bot güncel modda aktif!')
     app.run_polling()
