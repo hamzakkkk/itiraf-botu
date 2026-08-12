@@ -27,7 +27,7 @@ def keep_alive():
 # --- 2. BOT AYARLARI VE DEĞİŞKENLER ---
 ADMIN_ID = 8200746117
 TOKEN = '8870037601:AAFmFTITU4Fi9H2wrXZpu1tRNfjOT4DXCxw'
-MOLA_SURESI = 15
+MOLA_SURESI = 5
 
 itiraflar = []
 itiraf_sayaci = 1
