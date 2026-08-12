@@ -1,3 +1,4 @@
+import asyncio
 from datetime import datetime
 import os
 import re
@@ -30,10 +31,31 @@ def keep_alive():
 ADMIN_ID = 8200746117
 TOKEN = '8870037601:AAFmFTITU4Fi9H2wrXZpu1tRNfjOT4DXCxw'
 
+# 💡 Belo'nun Telegram User ID'sini biliyorsan 0 yerine onu yaz (Örn: 123456789)
+BELO_ID = 0
+
 itiraflar = []
+HEDEF_GRUP_ID = None  # Otomatik yakalanacak
 
 
-# --- 3. KOMUTLAR VE OTOMATİK MENÜ ---
+# --- 3. 30 DAKİKADA BİR ATILACAK OTOMATİK MESAJ ---
+async def otomatik_duyuru(app):
+    global HEDEF_GRUP_ID
+    while True:
+        await asyncio.sleep(1800)  # 30 dakika (1800 saniye)
+        if HEDEF_GRUP_ID:
+            try:
+                duyuru_metni = (
+                    'İTİRAF BOT 1.0 OLARAK HALİT KAPTANIN ARKASINDAYIZ'
+                )
+                await app.bot.send_message(
+                    chat_id=HEDEF_GRUP_ID, text=duyuru_metni
+                )
+            except Exception as e:
+                print(f'Otomatik duyuru hatası: {e}')
+
+
+# --- 4. KOMUTLAR VE OTOMATİK MENÜ ---
 async def post_init(app):
     komutlar = [
         BotCommand('itiraf', 'Anonim itiraf gönder (Sadece özel mesajda)'),
@@ -43,10 +65,23 @@ async def post_init(app):
         BotCommand('belo', 'Belo ve Fehmiyi etiketler'),
     ]
     await app.bot.set_my_commands(komutlar)
+    # Arka planda 30 dk'lık döngüyü başlatır
+    asyncio.create_task(otomatik_duyuru(app))
 
 
-# 🌤️ HAVA DURUMU (Sadece /hava)
+# GRUP ID YAKALAYICI
+def grup_id_kaydet(update: Update):
+    global HEDEF_GRUP_ID
+    if update.effective_chat and update.effective_chat.type in [
+        'group',
+        'supergroup',
+    ]:
+        HEDEF_GRUP_ID = update.effective_chat.id
+
+
+# 🌤️ HAVA DURUMU
 async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    grup_id_kaydet(update)
     sehir = ' '.join(context.args) if context.args else 'Izmit'
     try:
         headers = {'User-Agent': 'curl/7.68.0'}
@@ -64,8 +99,9 @@ async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
-# 🔮 GÜNLÜK BURÇ YORUMU (Resmi Türkçe RSS Akışı - Kesintisiz)
+# 🔮 GÜNLÜK BURÇ YORUMU
 async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    grup_id_kaydet(update)
     if not context.args:
         await update.message.reply_text(
             'Lütfen bir burç adı yazın. Örnek: /burc koc\n'
@@ -106,7 +142,6 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
         return
 
     try:
-        # Haber7 Resmi Astroloji RSS Akışı
         url = 'https://siteneekle.haber7.com/rss/astroloji.xml'
         headers = {'User-Agent': 'Mozilla/5.0'}
         res = requests.get(url, headers=headers, timeout=5)
@@ -119,26 +154,42 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
                 title = item.find('title')
                 description = item.find('description')
 
-                if title is not None and hedef_isim.lower() in title.text.lower():
+                if (
+                    title is not None
+                    and hedef_isim.lower() in title.text.lower()
+                ):
                     if description is not None and description.text:
-                        # HTML etiketlerini ve CDATA yapılarını temizle
-                        metin = re.sub(r'<[^<]+?>', '', description.text).strip()
+                        metin = re.sub(
+                            r'<[^<]+?>', '', description.text
+                        ).strip()
                         metin = metin.replace('&nbsp;', ' ')
-                        
+
                         await update.message.reply_text(
-                            f'🔮 **{hedef_isim.upper()} BURCU GÜNLÜK YORUMU:**\n\n{metin}'
+                            f'🔮 {hedef_isim.upper()} BURCU GÜNLÜK'
+                            f' YORUMU:\n\n{metin}'
                         )
                         return
 
-        await update.message.reply_text('⚠️ Bugün için burç yorumu henüz güncellenmedi.')
+        await update.message.reply_text(
+            '⚠️ Bugün için burç yorumu henüz güncellenmedi.'
+        )
 
     except Exception:
-        await update.message.reply_text('⚠️ Burç yorumu alınırken bir hata oluştu.')
+        await update.message.reply_text(
+            '⚠️ Burç yorumu alınırken bir hata oluştu.'
+        )
 
 
-# 🏷️ BELO ETİKETLEME
+# 🏷️ BELO VE FEHMİ ETİKETLEME
 async def belo_etiketle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text('belo @fehmi99')
+    grup_id_kaydet(update)
+    if BELO_ID != 8200746117:
+        belo_metin = f'[belo](tg://user?id={BELO_ID})'
+    else:
+        belo_metin = 'belo'
+
+    mesaj = f'{belo_metin} @fehmi99'
+    await update.message.reply_text(mesaj, parse_mode='Markdown')
 
 
 # 📩 İTİRAF SİSTEMİ
@@ -181,6 +232,7 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def itiraf_getir(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    grup_id_kaydet(update)
     if not itiraflar:
         await update.message.reply_text('Şu an havuzda hiç itiraf yok!')
         return
