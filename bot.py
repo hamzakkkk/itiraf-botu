@@ -1,6 +1,5 @@
 from datetime import datetime
 import os
-import re
 import threading
 from flask import Flask
 import requests
@@ -63,7 +62,7 @@ async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
-# 🔮 CANLI GÜNLÜK BURÇ YORUMU (Elle Astroloji Scraping)
+# 🔮 GÜNLÜK BURÇ YORUMU (Kesintisiz JSON API)
 async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not context.args:
         await update.message.reply_text(
@@ -83,66 +82,60 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     }
     burc = tr_map.get(burc, burc)
 
-    # Elle sitesindeki burç isim haritası
-    elle_map = {
-        'koc': 'koc-burcu',
-        'boga': 'boga-burcu',
-        'ikizler': 'ikizler-burcu',
-        'yengec': 'yengec-burcu',
-        'aslan': 'aslan-burcu',
-        'basak': 'basak-burcu',
-        'terazi': 'terazi-burcu',
-        'akrep': 'akrep-burcu',
-        'yay': 'yay-burcu',
-        'oglak': 'oglak-burcu',
-        'kova': 'kova-burcu',
-        'balik': 'balik-burcu',
-    }
+    gecerli_burclar = [
+        'koc',
+        'boga',
+        'ikizler',
+        'yengec',
+        'aslan',
+        'basak',
+        'terazi',
+        'akrep',
+        'yay',
+        'oglak',
+        'kova',
+        'balik',
+    ]
 
-    if burc not in elle_map:
+    if burc not in gecerli_burclar:
         await update.message.reply_text(
             '⚠️ Geçersiz burç adı. Örnek kullanım: /burc koc'
         )
         return
 
-    headers = {
-        'User-Agent': (
-            'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-            ' (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-        )
-    }
-
     try:
-        url = f'https://www.elle.com.tr/astroloji/{elle_map[burc]}'
-        res = requests.get(url, headers=headers, timeout=6)
+        # Doğrudan açık API servisinden veriyi JSON olarak çeker
+        url = f'https://api.statick.org/horoscope/{burc}'
+        res = requests.get(url, timeout=5)
 
         if res.status_code == 200:
-            # HTML içinden günlük paragrafı çekme
-            match = re.search(
-                r'<div class="standard-body-item[^"]*">(.*?)</div>',
-                res.text,
-                re.DOTALL,
-            )
-            if not match:
-                match = re.search(r'<p>(.*?)</p>', res.text, re.DOTALL)
+            data = res.json()
+            yorum = data.get('horoscope') or data.get('text') or data.get('yorum')
+            if yorum:
+                await update.message.reply_text(
+                    f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
+                )
+                return
 
-            if match:
-                yorum = re.sub(r'<[^<]+?>', '', match.group(1)).strip()
-                # Çok uzun metinleri temizleme
-                if len(yorum) > 800:
-                    yorum = yorum[:800] + '...'
+        # Yedek açık API servisi
+        url_yedek = f'https://horoscope-api.herokuapp.com/horoscope/today/{burc}'
+        res_yedek = requests.get(url_yedek, timeout=5)
+        if res_yedek.status_code == 200:
+            data = res_yedek.json()
+            yorum = data.get('horoscope')
+            if yorum:
                 await update.message.reply_text(
                     f'🔮 {burc.upper()} BURCU GÜNLÜK YORUMU:\n\n{yorum}'
                 )
                 return
 
         await update.message.reply_text(
-            '⚠️ Burç yorumu şu an çekilemedi, lütfen tekrar deneyin.'
+            '⚠️ Burç servisi yanıt vermedi, lütfen tekrar deneyin.'
         )
 
     except Exception:
         await update.message.reply_text(
-            '⚠️ Bağlantı hatası oluştu, lütfen tekrar deneyin.'
+            '⚠️ Burç yorumu çekilirken bir bağlantı hatası oluştu.'
         )
 
 
@@ -209,5 +202,5 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('burc', burc_yorum))
     app.add_handler(CommandHandler('belo', belo_etiketle))
 
-    print('Bot güncel modda aktif!')
+    print('Bot aktif!')
     app.run_polling()
