@@ -2,6 +2,7 @@ import asyncio
 from datetime import datetime
 import hashlib
 import os
+import random
 import threading
 from flask import Flask
 import requests
@@ -33,6 +34,9 @@ BELO_ID = 8200746117
 
 itiraflar = []
 HEDEF_GRUP_ID = None
+
+# Grupta aktif olan kullanıcıları saklayacağımız liste (Günün çifti için)
+grup_uyeleri = {}
 
 
 # --- 3. PRO ASTROLOJİ HAVUZU ---
@@ -190,23 +194,33 @@ async def post_init(app):
         BotCommand('hava', 'Hava durumunu öğren (Örn: /hava izmit)'),
         BotCommand('burc', 'Günlük burç yorumu (Örn: /burc koc)'),
         BotCommand('belo', 'Belo ve Fehmiyi etiketler'),
+        BotCommand('cift', 'Günün çiftini seçer ❤️'),
     ]
     await app.bot.set_my_commands(komutlar)
     asyncio.create_task(otomatik_duyuru(app))
 
 
-def grup_id_kaydet(update: Update):
-    global HEDEF_GRUP_ID
+def grup_ve_kullanici_kaydet(update: Update):
+    global HEDEF_GRUP_ID, grup_uyeleri
     if update.effective_chat and update.effective_chat.type in [
         'group',
         'supergroup',
     ]:
-        HEDEF_GRUP_ID = update.effective_chat.id
+        chat_id = update.effective_chat.id
+        HEDEF_GRUP_ID = chat_id
+
+        if chat_id not in grup_uyeleri:
+            grup_uyeleri[chat_id] = {}
+
+        user = update.effective_user
+        if user and not user.is_bot:
+            # Kullanıcının adını ve ID'sini hafızaya al
+            grup_uyeleri[chat_id][user.id] = user.full_name
 
 
 # 🌤️ HAVA DURUMU
 async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    grup_id_kaydet(update)
+    grup_ve_kullanici_kaydet(update)
     sehir = ' '.join(context.args) if context.args else 'Izmit'
     try:
         headers = {'User-Agent': 'curl/7.68.0'}
@@ -226,7 +240,7 @@ async def hava_durumu(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 # 🔮 GÜNLÜK BURÇ YORUMU
 async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    grup_id_kaydet(update)
+    grup_ve_kullanici_kaydet(update)
     if not context.args:
         await update.message.reply_text(
             'Lütfen bir burç adı yazın. Örnek: /burc koc\n'
@@ -282,9 +296,47 @@ async def burc_yorum(update: Update, context: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(mesaj)
 
 
+# ❤️ GÜNÜN ÇİFTİ KOMUTU
+async def gunun_cifti(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    grup_ve_kullanici_kaydet(update)
+
+    if update.effective_chat.type not in ['group', 'supergroup']:
+        await update.message.reply_text(
+            'Bu komut sadece gruplarda kullanılabilir!'
+        )
+        return
+
+    chat_id = update.effective_chat.id
+    uyeler = grup_uyeleri.get(chat_id, {})
+
+    if len(uyeler) < 2:
+        await update.message.reply_text(
+            '⚠️ Günün çiftini seçebilmem için gruptan en az 2 kişinin bot'
+            ' komutlarını kullanmış olması veya mesaj atması gerekiyor!'
+        )
+        return
+
+    # Üyeler arasından rastgele 2 kişi seç
+    secilenler = random.sample(list(uyeler.items()), 2)
+    kisi1_id, kisi1_adi = secilenler[0]
+    kisi2_id, kisi2_adi = secilenler[1]
+
+    tarih_str = datetime.now().strftime('%d.%m.%Y')
+
+    mesaj = (
+        f'💘 GÜNÜN ÇİFTİ ({tarih_str}) 💘\n\n'
+        f'Yıldızlar bugün bu iki güzel insanı işaret ediyor:\n\n'
+        f'👩‍❤️‍👨 [ {kisi1_adi} ]  ➕  [ {kisi2_adi} ]\n\n'
+        f'Uyum Derecesi: %{random.randint(85, 100)} 🔥\n'
+        f'Tebrikler! 🎉'
+    )
+
+    await update.message.reply_text(mesaj)
+
+
 # 🏷️ BELO VE FEHMİ ETİKETLEME
 async def belo_etiketle(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    grup_id_kaydet(update)
+    grup_ve_kullanici_kaydet(update)
     belo_metin = f'[belo](tg://user?id={BELO_ID})'
     mesaj = f'{belo_metin} @fehmi99'
     await update.message.reply_text(mesaj, parse_mode='Markdown')
@@ -329,7 +381,7 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
 
 async def itiraf_getir(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    grup_id_kaydet(update)
+    grup_ve_kullanici_kaydet(update)
     if not itiraflar:
         await update.message.reply_text('Şu an havuzda hiç itiraf yok!')
         return
@@ -346,7 +398,8 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('itirafgetir', itiraf_getir))
     app.add_handler(CommandHandler('hava', hava_durumu))
     app.add_handler(CommandHandler('burc', burc_yorum))
-    app.add_handler(CommandHandler('belo', belo_etiketle))
+    app.add_handler(CommandHandler('belolar', belo_etiketle))
+    app.add_handler(CommandHandler('çift', gunun_cifti))
 
     print('Bot aktif!')
     app.run_polling()
