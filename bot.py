@@ -176,23 +176,6 @@ ASK_ILISKI = [
 ]
 
 
-# --- 4. 30 DAKİKADA BİR OTOMATİK MESAJ ---
-async def otomatik_duyuru(app):
-    global HEDEF_GRUP_ID
-    while True:
-        await asyncio.sleep(600)
-        if HEDEF_GRUP_ID:
-            try:
-                duyuru_metni = (
-                    'HALK KAZANDI MİLLET KAZANDI DEVLET KAZANDI KAPTAN HALİT TUĞRUL OYLARIN %51İNİ ALARAK TEK BAŞINA İKTİDAR'
-                )
-                await app.bot.send_message(
-                    chat_id=HEDEF_GRUP_ID, text=duyuru_metni
-                )
-            except Exception as e:
-                print(f'Otomatik duyuru hatası: {e}')
-
-
 # --- 5. KOMUTLAR VE OTOMATİK MENÜ ---
 async def post_init(app):
     komutlar = [
