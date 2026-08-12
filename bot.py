@@ -415,7 +415,6 @@ if __name__ == '__main__':
     app.add_handler(CommandHandler('burc', burc_yorum))
     app.add_handler(CommandHandler('belo', belo_etiketle))
     app.add_handler(CommandHandler('cift', gunun_cifti))
-    app.add_handler(CommandHandler('çift', gunun_cifti))
 
     print('Bot aktif!')
     app.run_polling()
