@@ -184,7 +184,7 @@ async def otomatik_duyuru(app):
         if HEDEF_GRUP_ID:
             try:
                 duyuru_metni = (
-                    'HALK KAZANDI MİLLET KAZANDI DEVLET KAZANDI KAPTAN HALİT TUĞRUL OYLARIN %51'ini ALARAK TEK BAŞINA İKTİDAR'
+                    'HALK KAZANDI MİLLET KAZANDI DEVLET KAZANDI KAPTAN HALİT TUĞRUL OYLARIN %51İNİ ALARAK TEK BAŞINA İKTİDAR'
                 )
                 await app.bot.send_message(
                     chat_id=HEDEF_GRUP_ID, text=duyuru_metni
