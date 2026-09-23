@@ -35,6 +35,7 @@ def keep_alive():
 
 # --- 2. BOT AYARLARI ---
 ADMIN_ID = 8942548066
+KANAL_ID = -1004386646439  # İtirafların kalıcı düşeceği kanal
 TOKEN = '8514033457:AAE7llkhNIGUIKHyIpkQIVvnaJ8mtouwZUQ'
 
 itiraflar = []
@@ -264,8 +265,20 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     user = update.effective_user
     zaman = datetime.now().strftime('%d.%m.%Y %H:%M:%S')
-    itiraflar.append(f'📢 ANONİM İTİRAF:\n\n{metin}')
+    itiraf_metni = f'📢 ANONİM İTİRAF:\n\n{metin}'
+    itiraflar.append(itiraf_metni)
 
+    # 1. Kanala anonim olarak gönder
+    if KANAL_ID:
+        try:
+            await context.bot.send_message(
+                chat_id=KANAL_ID,
+                text=f'📢 YENİ İTİRAF ({zaman}):\n\n{metin}'
+            )
+        except Exception as e:
+            print(f'Kanal gönderim hatası: {e}')
+
+    # 2. Sana (Admin) detaylı bilgi gönder
     if ADMIN_ID != 0:
         admin_mesaj = (
             f'📥 YENİ İTİRAF HAVUZA EKLENDİ\n\n'
@@ -279,7 +292,7 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
         except Exception as e:
             print(f'Admin bildirim hatası: {e}')
 
-    await update.message.reply_text('İtirafın havuza kaydedildi! 👍')
+    await update.message.reply_text('İtirafın kanala ve havuza iletildi! 👍')
 
 
 async def itiraf_getir(update: Update, context: ContextTypes.DEFAULT_TYPE):
