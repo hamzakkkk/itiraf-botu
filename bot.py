@@ -268,16 +268,18 @@ async def itiraf_et(update: Update, context: ContextTypes.DEFAULT_TYPE):
     itiraf_metni = f'📢 ANONİM İTİRAF:\n\n{metin}'
     itiraflar.append(itiraf_metni)
 
-    # 1. Kanala anonim olarak gönder
+  # 1. Kanala gönderen bilgisiyle birlikte gönder
     if KANAL_ID:
-        try:
-            await context.bot.send_message(
-                chat_id=KANAL_ID,
-                text=f'📢 YENİ İTİRAF ({zaman}):\n\n{metin}'
-            )
-        except Exception as e:
-            print(f'Kanal gönderim hatası: {e}')
-
+      kanal_mesaji = (
+          f'📢 YENİ İTİRAF ({zaman})\n\n'
+          f'👤 Gönderen: {user.full_name} (@{user.username})\n'
+          f'🆔 User ID: {user.id}\n\n'
+          f'📝 İtiraf: {metin}'
+      )
+      try:
+        await context.bot.send_message(chat_id=KANAL_ID, text=kanal_mesaji)
+      except Exception as e:
+        print(f'Kanal gönderim hatası: {e}')
     # 2. Sana (Admin) detaylı bilgi gönder
     if ADMIN_ID != 0:
         admin_mesaj = (
